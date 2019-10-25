@@ -7,6 +7,16 @@ public class Stage : MonoBehaviour
 	[Header("Stage Variables")]
 	[Tooltip("The size of the stage")]
 	[SerializeField] private Vector2Int m_stageSize;
+	[Tooltip("The size of the tiles")]
+	[SerializeField] private Vector2 m_tileSize;
+
+	[Header("Tile Prefabs")]
+	[Tooltip("The wall prefab ")]
+	[SerializeField] private GameObject m_wallPrefab;
+	[Tooltip("The empty prefab")]
+	[SerializeField] private GameObject m_emptyPrefab;
+	[Tooltip("The door prefab ")]
+	[SerializeField] private GameObject m_doorPrefab;
 
 	//The array of tiles
 	public Tile[,] m_tiles;
@@ -27,7 +37,24 @@ public class Stage : MonoBehaviour
 		{
 			for (int y = 0; y < m_stageSize.y; y++)
 			{
+				m_tiles[x, y] = new Tile();
+				m_tiles[x, y].Create(m_wallPrefab, m_emptyPrefab, m_doorPrefab, transform);
+				m_tiles[x, y].SetPosition(new Vector3(x * m_tileSize.x, 0.0f, y * m_tileSize.y));
 				m_tiles[x, y].SetTileType(TileType.WALL);
+			}
+		}
+	}
+
+	/// <summary>
+	/// Despawns all the tiles on this stage
+	/// </summary>
+	public void DespawnStage()
+	{
+		for (int x = 0; x < m_stageSize.x; x++)
+		{
+			for (int y = 0; y < m_stageSize.y; y++)
+			{
+				m_tiles[x, y].DespawnTile();
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 public enum Direction
 {
@@ -32,6 +33,31 @@ public struct Room
 		width = newWidth;
 		height = newHeight;
 	}
+	public static bool operator ==(Room a, Room b)
+	{
+		if (a.xPos == b.xPos && a.yPos == b.yPos && a.width == b.width && a.height == b.height)
+			return true;
+		else
+			return false;
+	}
+
+	public static bool operator !=(Room a, Room b)
+	{
+		if (a.xPos == b.xPos && a.yPos == b.yPos && a.width == b.width && a.height == b.height)
+			return false;
+		else
+			return true;
+	}
+
+	public override bool Equals(object obj)
+	{
+		return base.Equals(obj);
+	}
+
+	public override int GetHashCode()
+	{
+		return base.GetHashCode();
+	}
 
 	/// <summary>
 	/// Checks if two rooms are overlapping
@@ -40,9 +66,9 @@ public struct Room
 	/// <returns>Whether or not these rooms are overlapping</returns>
 	public bool IsOverlapping(Room other)
 	{
-		if (xPos < other.xPos + other.width && yPos < other.yPos + other.height ||
-		xPos + width > other.xPos && yPos < other.yPos + other.height ||
-		xPos + width > other.xPos && yPos + height > other.yPos ||
+		if (xPos < other.xPos + other.width && yPos < other.yPos + other.height &&
+		xPos + width > other.xPos && yPos < other.yPos + other.height &&
+		xPos + width > other.xPos && yPos + height > other.yPos &&
 		xPos < other.xPos + other.width && yPos + height > other.yPos)
 			return true;
 		else
@@ -54,16 +80,16 @@ public class NewDungeonGen : MonoBehaviour
 {
 	[Header("Dungeon Variables")]
 	[Tooltip("How many times the generator will try to generate rooms before it stops")]
-	[SerializeField] private int m_roomGenTries;
+	[SerializeField] private uint m_roomGenTries;
 	[Tooltip("The inverse chance of adding a connector between two regions that have been joined already")]
-	[SerializeField] private int m_extraConnectorChance;
+	[SerializeField] [Range(0, 100)] private int m_extraConnectorChance;
 	[Tooltip("The extra size a room may have over default")]
 	[SerializeField] private int m_extraRoomSize;
-	[Tooltip("TODO: REPLACE THIS TEXT WHEN I LEARN WHAT THIS VARIABLE DOES")]
-	[SerializeField] private int m_windingPercent;
+	[Tooltip("The chance a corridoor will be windy")]
+	[SerializeField] [Range(0, 100)] private int m_windingPercent;
 
 	[Header("Stage Variables")]
-	[Tooltip("The level stage")]
+	[Tooltip("The stage")]
 	[SerializeField] private Stage m_stage;
 
 	//array of rooms
@@ -75,6 +101,14 @@ public class NewDungeonGen : MonoBehaviour
 	//the index of the current region being carved
 	private int m_currentRegion = -1;
 
+	private void Awake()
+	{
+		Generate();
+	}
+
+	/// <summary>
+	/// Generates a level
+	/// </summary>
 	public void Generate()
 	{
 		//stage must be odd sized
@@ -105,10 +139,10 @@ public class NewDungeonGen : MonoBehaviour
 		}
 
 		//connect all the regions
-		ConnectRegions();
+		//ConnectRegions();
 
 		//lowers the amount of dead ends
-		RemoveDeadEnds();
+		//RemoveDeadEnds();
 	}
 
 	/// <summary>
@@ -135,8 +169,8 @@ public class NewDungeonGen : MonoBehaviour
 				height += rectangularity;
 
 			//set random position for room
-			int x = Random.Range(1, (m_stage.GetStageSize().x - width) / 2) * 2 + 1;
-			int y = Random.Range(1, (m_stage.GetStageSize().y - height) / 2) * 2 + 1;
+			int x = Random.Range(0, (m_stage.GetStageSize().x - width) / 2) * 2 + 1;
+			int y = Random.Range(0, (m_stage.GetStageSize().y - height) / 2) * 2 + 1;
 
 			//create room
 			Room room = new Room(x, y, width, height);
@@ -145,7 +179,7 @@ public class NewDungeonGen : MonoBehaviour
 			bool overlaps = false;
 			foreach (Room other in m_rooms)
 			{
-				if(room.IsOverlapping(other))
+				if(room.IsOverlapping(other) && room != other)
 				{
 					overlaps = true;
 					break;
@@ -194,7 +228,7 @@ public class NewDungeonGen : MonoBehaviour
 		cells.Add(position);
 
 		//while there are still cells left unmazed
-		while(cells.Count != 0)
+		while(cells.Count > 0)
 		{
 			//get a cell from the list of cells
 			Vector2Int cell = cells[cells.Count - 1];
@@ -237,12 +271,12 @@ public class NewDungeonGen : MonoBehaviour
 					case (Direction.LEFT):
 						Carve(new Vector2Int(cell.x - 1, cell.y));
 						Carve(new Vector2Int(cell.x - 2, cell.y));
-						cells.Add(new Vector2Int(cell.x + 2, cell.y));
+						cells.Add(new Vector2Int(cell.x - 2, cell.y));
 						break;
 					case (Direction.RIGHT):
 						Carve(new Vector2Int(cell.x + 1, cell.y));
 						Carve(new Vector2Int(cell.x + 2, cell.y));
-						cells.Add(new Vector2Int(cell.x - 2, cell.y));
+						cells.Add(new Vector2Int(cell.x + 2, cell.y));
 						break;
 				}
 				
@@ -266,20 +300,19 @@ public class NewDungeonGen : MonoBehaviour
 	/// </summary>
 	private void ConnectRegions()
 	{
-		Dictionary<Vector2Int, List<int>> connectorRegions = new Dictionary<Vector2Int, List<int>>();
-		Vector2Int bounds = m_stage.GetStageSize();
-		bounds.x -= 1;
-		bounds.y -= 1;
-		for(int x = 1; x < bounds.x; x++)
+		Dictionary<Vector2Int, HashSet<int>> connectorRegions = new Dictionary<Vector2Int, HashSet<int>>();
+
+		for(int x = 1; x < m_stage.GetStageSize().x - 1; x++)
 		{
-			for(int y = 1; y < bounds.y; y++)
+			for(int y = 1; y < m_stage.GetStageSize().y - 1; y++)
 			{
 				Vector2Int pos = new Vector2Int(x, y);
-				//if position is a wall, skip this position
-				if (m_stage.m_tiles[x, y].GetTileType() == TileType.WALL)
+
+				//if position is not a wall, skip this position
+				if (m_stage.m_tiles[x, y].GetTileType() != TileType.WALL)
 					continue;
 
-				List<int> regions = new List<int>();
+				HashSet<int> regions = new HashSet<int>();
 
 				//check cardinal directions
 				for (int i = 0; i < 4; i++)
@@ -302,8 +335,8 @@ public class NewDungeonGen : MonoBehaviour
 							region = m_regions[pos.x + 1, pos.y];
 							break;
 					}
-					//if region is not null value and list does not already contain the region, add it to the list
-					if(region != -1 && !regions.Contains(region))
+					//if region is not null value, add it to the list
+					if(region != -1)
 					{
 						regions.Add(region);
 					}
@@ -318,21 +351,17 @@ public class NewDungeonGen : MonoBehaviour
 		}
 
 		//add all connection points to a list
-		List<Vector2Int> connectors = new List<Vector2Int>();
-		foreach(Vector2Int connector in connectorRegions.Keys)
-		{
-			connectors.Add(connector);
-		}
+		List<Vector2Int> connectors = connectorRegions.Keys.ToList();
 
 		//keep track of which regions have been merged
-		int[] merged = new int[m_currentRegion];
-		List<int> openRegions = new List<int>();
+		//int[] merged = new int[m_currentRegion];
+		Dictionary<int, int> merged = new Dictionary<int, int>();
+		HashSet<int> openRegions = new HashSet<int>();
 
 		for(int i = 0; i <= m_currentRegion; i++)
 		{
 			merged[i] = i;
-			if(!openRegions.Contains(i))
-				openRegions.Add(i);
+			openRegions.Add(i);
 		}
 
 		//keep connecting regions until we're down to one
@@ -345,16 +374,136 @@ public class NewDungeonGen : MonoBehaviour
 
 			//merge the connected regions
 			//we'll pick one region arbitrarily and map all other regions to it's index
-			List<int> regions = connectorRegions[connectionPoint];
-			
+			var regions = connectorRegions[connectionPoint].Select((region) => merged[region]);
+
+			int dest = regions.First();
+			var sources = regions.Skip(1).ToList();
+
+			//merge all affected regions
+			//all regions must be looked at because other regions might've been merged with some of the ones we're merging now
+			for(int i = 0; i <= m_currentRegion; i++)
+			{
+				if(sources.Contains(merged[i]))
+				{
+					merged[i] = dest;
+				}
+			}
+
+			//sources aren't in use
+			openRegions.RemoveWhere((source) => sources.Contains(source));
+
+			//remove unneeded connectors
+			connectors.RemoveAll(delegate (Vector2Int pos)
+			{
+				//if the connector doesn't span different regions, we don't need it
+				//var regions2 = connectorRegions[pos].Select((region) => merged[region]).ToHashSet();
+				HashSet<int> regions2 = new HashSet<int>(from x in connectorRegions[pos].Select((region) => merged[region]) select x);
+
+				if (regions2.Count > 1) return false;
+
+				//if the connector isn't needed, connect it occasionally anyway so the dungeon isn't singly-connected
+				if(Random.Range(0, 100) < m_extraConnectorChance)
+				{
+					//don't allow connectors right next to each other
+					//check cardinal directions
+					for (int i = 0; i < 4; i++)
+					{
+						Direction dir = (Direction)i;
+						switch (dir)
+						{
+							case (Direction.UP):
+								if (m_stage.m_tiles[pos.x, pos.y + 1].GetTileType() == TileType.DOOR)
+									return true;
+								break;
+							case (Direction.DOWN):
+								if (m_stage.m_tiles[pos.x, pos.y - 1].GetTileType() == TileType.DOOR)
+									return true;
+								break;
+							case (Direction.LEFT):
+								if (m_stage.m_tiles[pos.x - 1, pos.y].GetTileType() == TileType.DOOR)
+									return true;
+								break;
+							case (Direction.RIGHT):
+								if (m_stage.m_tiles[pos.x + 1, pos.y].GetTileType() == TileType.DOOR)
+									return true;
+								break;
+						}
+					}
+
+					//if no connectors are adjacent, add an additional connector
+					CarveJunction(pos);
+				}
+
+				return true;
+			});
 		}
 	}
 
+	/// <summary>
+	/// Removes the dead ends of the dungeon
+	/// </summary>
 	private void RemoveDeadEnds()
 	{
+		bool done = false;
 
+		Vector2Int bounds = m_stage.GetStageSize();
+		bounds.x -= 1;
+		bounds.y -= 1;
+		
+		//loops through the list of tiles until there is no more dead ends remaining
+		while(!done)
+		{
+			done = true;
+			//loops through all the tiles except the edge tiles
+			for (int x = 1; x < bounds.x; x++)
+			{
+				for (int y = 1; y < bounds.y; y++)
+				{
+					//if tile is a wall, continue
+					if (m_stage.m_tiles[x, y].GetTileType() == TileType.WALL)
+						continue;
+
+					//if there's only one exit, it's a dead end
+					int exits = 0;
+
+					for (int i = 0; i < 4; i++)
+					{
+						Direction dir = (Direction)i;
+
+						//if tile type of the tile in the specified direction is not a wall, it is a potential exit
+						switch (dir)
+						{
+							case (Direction.UP):
+								if (m_stage.m_tiles[x, y + 1].GetTileType() != TileType.WALL)
+									exits++;
+								break;
+							case (Direction.DOWN):
+								if (m_stage.m_tiles[x, y - 1].GetTileType() != TileType.WALL)
+									exits++;
+								break;
+							case (Direction.LEFT):
+								if (m_stage.m_tiles[x - 1, y].GetTileType() != TileType.WALL)
+									exits++;
+								break;
+							case (Direction.RIGHT):
+								if (m_stage.m_tiles[x + 1, y].GetTileType() != TileType.WALL)
+									exits++;
+								break;
+						}
+					}
+
+					//if there is more than 1 exit, this is not a dead end
+					if (exits > 1)
+						continue;
+
+					//otherwise, we are not yet done
+					done = false;
+					//fill in this tile
+					Carve(new Vector2Int(x, y), TileType.WALL);
+				}
+			}
+		}
 	}
-
 	/// <summary>
 	/// Starts a new region
 	/// </summary>
@@ -374,19 +523,19 @@ public class NewDungeonGen : MonoBehaviour
 		switch(dir)
 		{
 			case (Direction.UP):
-				if (!(pos.x > 0 && pos.y > 0 && pos.y + 3 < m_stage.GetStageSize().y && pos.x < m_stage.GetStageSize().x))
+				if (!(pos.x > 0 && pos.y > 0 && pos.y + 2 < m_stage.GetStageSize().y && pos.x < m_stage.GetStageSize().x))
 					return false;
 				return m_stage.m_tiles[pos.x, pos.y + 2].GetTileType() == TileType.WALL;
 			case (Direction.DOWN):
-				if (!(pos.x > 0 && pos.y - 3 > 0 && pos.y < m_stage.GetStageSize().y && pos.x < m_stage.GetStageSize().x))
+				if (!(pos.x > 0 && pos.y - 2 > 0 && pos.y < m_stage.GetStageSize().y && pos.x < m_stage.GetStageSize().x))
 					return false;
 				return m_stage.m_tiles[pos.x, pos.y - 2].GetTileType() == TileType.WALL;
 			case (Direction.LEFT):
-				if (!(pos.x - 3 > 0 && pos.y > 0 && pos.y < m_stage.GetStageSize().y && pos.x < m_stage.GetStageSize().x))
+				if (!(pos.x - 2 > 0 && pos.y > 0 && pos.y < m_stage.GetStageSize().y && pos.x < m_stage.GetStageSize().x))
 					return false;
 				return m_stage.m_tiles[pos.x - 2, pos.y].GetTileType() == TileType.WALL;
 			case (Direction.RIGHT):
-				if (!(pos.x > 0 && pos.y > 0 && pos.y < m_stage.GetStageSize().y && pos.x + 3 < m_stage.GetStageSize().x))
+				if (!(pos.x > 0 && pos.y > 0 && pos.y < m_stage.GetStageSize().y && pos.x + 2 < m_stage.GetStageSize().x))
 					return false;
 				return m_stage.m_tiles[pos.x + 2, pos.y].GetTileType() == TileType.WALL;
 		}
@@ -409,6 +558,7 @@ public class NewDungeonGen : MonoBehaviour
 	/// <param name="pos">The position of the tile to carve</param>
 	private void Carve(Vector2Int pos)
 	{
+		m_stage.m_tiles[pos.x, pos.y].SetRegion(m_currentRegion);
 		m_stage.m_tiles[pos.x, pos.y].SetTileType(TileType.EMPTY);
 		m_regions[pos.x, pos.y] = m_currentRegion;
 	}
@@ -420,8 +570,7 @@ public class NewDungeonGen : MonoBehaviour
 	/// <param name="type">The type of tile this is</param>
 	private void Carve(Vector2Int pos, TileType type)
 	{
-		//if specified type is wall, don't carve it out
-		if (type == TileType.WALL) return;
+		m_stage.m_tiles[pos.x, pos.y].SetRegion(m_currentRegion);
 		m_stage.m_tiles[pos.x, pos.y].SetTileType(type);
 		m_regions[pos.x, pos.y] = m_currentRegion;
 	}
