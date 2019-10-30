@@ -293,7 +293,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_roomGenTries: 200
-  m_extraConnectorChance: 5
+  m_extraConnectorChance: 1
   m_extraRoomSize: 2
   m_windingPercent: 20
   m_stage: {fileID: 2069335103}
