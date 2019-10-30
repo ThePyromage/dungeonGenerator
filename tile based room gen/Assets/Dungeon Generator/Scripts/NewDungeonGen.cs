@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
 
+#region Enums and Structs
+
 public enum Direction
 {
 	UP,
@@ -11,6 +13,15 @@ public enum Direction
 	RIGHT,
 	NULL
 }
+
+public struct Directions
+{
+	public static Vector2Int up = new Vector2Int(0, 1);
+	public static Vector2Int down = new Vector2Int(0, -1);
+	public static Vector2Int left = new Vector2Int(-1, 0);
+	public static Vector2Int right = new Vector2Int(1, 0);
+}
+
 
 public struct Room
 {
@@ -76,6 +87,7 @@ public struct Room
 	}
 }
 
+#endregion
 public class NewDungeonGen : MonoBehaviour
 {
 	[Header("Dungeon Variables")]
@@ -96,7 +108,8 @@ public class NewDungeonGen : MonoBehaviour
 	private List<Room> m_rooms = new List<Room>();
 
 	//2d array of regions
-	private int[,] m_regions;
+	//private int[,] m_regions;
+	private Dictionary<Vector2Int, int> m_regions;
 
 	//the index of the current region being carved
 	private int m_currentRegion = -1;
@@ -119,7 +132,14 @@ public class NewDungeonGen : MonoBehaviour
 		m_stage.Initialise();
 
 		//init regions
-		m_regions = new int[m_stage.GetStageSize().x, m_stage.GetStageSize().y];
+		m_regions = new Dictionary<Vector2Int, int>()/*[m_stage.GetStageSize().x, m_stage.GetStageSize().y]*/;
+		for (int regionY = 0; regionY < m_stage.GetStageSize().y; regionY++)
+		{
+			for(int regionX = 0; regionX < m_stage.GetStageSize().x; regionX++)
+			{
+				m_regions[new Vector2Int(regionX, regionY)] = -1;
+			}
+		}
 
 		//Create the rooms
 		AddRooms();
@@ -139,10 +159,10 @@ public class NewDungeonGen : MonoBehaviour
 		}
 
 		//connect all the regions
-		//ConnectRegions();
+		ConnectRegions();
 
 		//lowers the amount of dead ends
-		//RemoveDeadEnds();
+		RemoveDeadEnds();
 	}
 
 	/// <summary>
@@ -317,22 +337,22 @@ public class NewDungeonGen : MonoBehaviour
 				//check cardinal directions
 				for (int i = 0; i < 4; i++)
 				{
-					Direction dir = (Direction)i;
+				Direction dir = (Direction)i;
 					//set region to null value
 					int region = -1;
 					switch (dir)
 					{
 						case (Direction.UP):
-							region = m_regions[pos.x, pos.y + 1];
+							region = m_regions[pos + Directions.up];
 							break;
 						case (Direction.DOWN):
-							region = m_regions[pos.x, pos.y - 1];
+							region = m_regions[pos + Directions.down];
 							break;
 						case (Direction.LEFT):
-							region = m_regions[pos.x - 1, pos.y];
+							region = m_regions[pos + Directions.left];
 							break;
 						case (Direction.RIGHT):
-							region = m_regions[pos.x + 1, pos.y];
+							region = m_regions[pos + Directions.right];
 							break;
 					}
 					//if region is not null value, add it to the list
@@ -340,6 +360,8 @@ public class NewDungeonGen : MonoBehaviour
 					{
 						regions.Add(region);
 					}
+				
+
 				}
 
 				//if there are less than two regions, continue the loop
@@ -356,28 +378,27 @@ public class NewDungeonGen : MonoBehaviour
 		//keep track of which regions have been merged
 		//int[] merged = new int[m_currentRegion];
 		Dictionary<int, int> merged = new Dictionary<int, int>();
-		HashSet<int> openRegions = new HashSet<int>();
 
 		for(int i = 0; i <= m_currentRegion; i++)
 		{
 			merged[i] = i;
-			openRegions.Add(i);
 		}
 
 		//keep connecting regions until we're down to one
-		while(openRegions.Count > 1)
+		while(connectors.Count > 1)
 		{
 			Vector2Int connectionPoint = connectors[Random.Range(0, connectors.Count)];
-
-			//carve the connection
-			CarveJunction(connectionPoint);
 
 			//merge the connected regions
 			//we'll pick one region arbitrarily and map all other regions to it's index
 			var regions = connectorRegions[connectionPoint].Select((region) => merged[region]);
 
+
 			int dest = regions.First();
 			var sources = regions.Skip(1).ToList();
+			
+			//carve the connection
+			CarveJunction(connectionPoint, dest);
 
 			//merge all affected regions
 			//all regions must be looked at because other regions might've been merged with some of the ones we're merging now
@@ -388,9 +409,6 @@ public class NewDungeonGen : MonoBehaviour
 					merged[i] = dest;
 				}
 			}
-
-			//sources aren't in use
-			openRegions.RemoveWhere((source) => sources.Contains(source));
 
 			//remove unneeded connectors
 			connectors.RemoveAll(delegate (Vector2Int pos)
@@ -431,11 +449,88 @@ public class NewDungeonGen : MonoBehaviour
 					}
 
 					//if no connectors are adjacent, add an additional connector
-					CarveJunction(pos);
+					CarveJunction(pos, dest);
 				}
 
 				return true;
 			});
+		}
+	}
+
+	/// <summary>
+	/// Flood fills from a point with the region of the position provided
+	/// </summary>
+	/// <param name="pos">The point to flood fill from</param>
+	private void FloodFillRegion(Vector2Int pos)
+	{
+		if (m_regions[pos] == -1) //if region of position is -1, this position is a wall, and we should not flood fill from here
+			return;
+
+		Queue<Vector2Int> tilesList = new Queue<Vector2Int>();
+
+		int region = m_regions[pos];
+
+		tilesList.Enqueue(pos);
+
+		//loops through the adjacent tiles from the point until there are no further points remaining
+		while(tilesList.Count > 0)
+		{
+			Vector2Int currentPosition = tilesList.Dequeue();
+			//loops through directions
+			for(int i = 0; i < 4; i++)
+			{
+				switch(i)
+				{
+					case (0): //up
+						int upRegion = m_regions[currentPosition + Directions.up];
+						if (upRegion == region) //if region is the same, don't do anything further
+							continue;
+						else if (upRegion == -1) //if region is -1, this is a wall
+							continue;
+						else //if region isn't the same, enqueue it
+						{
+							tilesList.Enqueue(currentPosition + Directions.up);
+							m_regions[currentPosition + Directions.up] = region;
+						}
+						break;
+					case (1): //down
+						int downRegion = m_regions[currentPosition + Directions.down];
+						if (downRegion == region) //if region is the same, don't do anything further
+							continue;
+						else if (downRegion == -1) //if region is -1, this is a wall
+							continue;
+						else //if region isn't the same, enqueue it and modify the region
+						{
+							tilesList.Enqueue(currentPosition + Directions.down);
+							m_regions[currentPosition + Directions.down] = region;
+						}
+						break;
+					case (2): //left
+						int leftRegion = m_regions[currentPosition + Directions.left];
+						if (leftRegion == region) //if region is the same, don't do anything further
+							continue;
+						else if (leftRegion == -1) //if region is -1, this is a wall
+							continue;
+						else //if region isn't the same, enqueue it
+						{
+							tilesList.Enqueue(currentPosition + Directions.left);
+							m_regions[currentPosition + Directions.left] = region;
+						}
+						break;
+					case (3): //right
+						int rightRegion = m_regions[currentPosition + Directions.right];
+						if (rightRegion == region) //if region is the same, don't do anything further
+							continue;
+						else if (rightRegion == -1) //if region is -1, this is a wall
+							continue;
+						else //if region isn't the same, enqueue it
+						{
+							tilesList.Enqueue(currentPosition + Directions.right);
+							m_regions[currentPosition + Directions.right] = region;
+						}
+						break;
+				}
+			}
 		}
 	}
 
@@ -546,10 +641,11 @@ public class NewDungeonGen : MonoBehaviour
 	/// Carves a door
 	/// </summary>
 	/// <param name="pos">The position of the door</param>
-	/// <param name="vertical">Whether or not the door is facing up/down</param>
-	private void CarveJunction(Vector2Int pos)
+	/// <param name="region"></param>
+	private void CarveJunction(Vector2Int pos, int region)
 	{
 		m_stage.m_tiles[pos.x, pos.y].SetTileType(TileType.DOOR);
+		m_regions[pos] = region;
 	}
 
 	/// <summary>
@@ -558,9 +654,8 @@ public class NewDungeonGen : MonoBehaviour
 	/// <param name="pos">The position of the tile to carve</param>
 	private void Carve(Vector2Int pos)
 	{
-		m_stage.m_tiles[pos.x, pos.y].SetRegion(m_currentRegion);
 		m_stage.m_tiles[pos.x, pos.y].SetTileType(TileType.EMPTY);
-		m_regions[pos.x, pos.y] = m_currentRegion;
+		m_regions[pos] = m_currentRegion;
 	}
 
 	/// <summary>
@@ -570,8 +665,7 @@ public class NewDungeonGen : MonoBehaviour
 	/// <param name="type">The type of tile this is</param>
 	private void Carve(Vector2Int pos, TileType type)
 	{
-		m_stage.m_tiles[pos.x, pos.y].SetRegion(m_currentRegion);
 		m_stage.m_tiles[pos.x, pos.y].SetTileType(type);
-		m_regions[pos.x, pos.y] = m_currentRegion;
+		m_regions[pos] = m_currentRegion;
 	}
 }

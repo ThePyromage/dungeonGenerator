@@ -39,7 +39,7 @@ public class Stage : MonoBehaviour
 			{
 				m_tiles[x, y] = new Tile();
 				m_tiles[x, y].Create(m_wallPrefab, m_emptyPrefab, m_doorPrefab, transform);
-				m_tiles[x, y].SetPosition(new Vector3(x * m_tileSize.x, 0.0f, y * m_tileSize.y));
+				m_tiles[x, y].SetPosition(new Vector3(x * m_tileSize.x, 0.0f, y * m_tileSize.y) + transform.position);
 				m_tiles[x, y].SetTileType(TileType.WALL);
 			}
 		}

@@ -61,8 +61,6 @@ public class Tile
 	//the position of the tile
 	private Vector3 m_position;
 
-	private int m_region = -1;
-
 	/// <summary>
 	/// Gets the current position of the tile
 	/// </summary>
@@ -74,8 +72,6 @@ public class Tile
 	/// </summary>
 	/// <param name="newPos">The new position</param>
 	public void SetPosition(Vector3 newPos) { m_position = newPos; }
-
-	public void SetRegion (int region) { m_region = region; }
 
 	/// <summary>
 	/// Spawns the initial tile
@@ -89,7 +85,6 @@ public class Tile
 				return;
 			case (TileType.EMPTY):
 				m_spawnedTile = Object.Instantiate(m_emptyPrefab, m_position, Quaternion.identity, m_stageTransform);
-				m_spawnedTile.GetComponent<Renderer>().material.color = GetRegionColour();
 				return;
 			case (TileType.DOOR):
 				m_spawnedTile = Object.Instantiate(m_doorPrefab, m_position, Quaternion.identity, m_stageTransform);
@@ -103,46 +98,5 @@ public class Tile
 	public void DespawnTile()
 	{
 		Object.Destroy(m_spawnedTile);
-	}
-
-	private Color GetRegionColour()
-	{
-		int modulusRegion = m_region % 15;
-
-		switch(modulusRegion)
-		{
-			case(0):
-				return Color.red;
-			case(1):
-				return Color.blue;
-			case(2):
-				return Color.green;
-			case(3):
-				return Color.cyan;
-			case(4):
-				return Color.yellow;
-			case(5):
-				return Color.magenta;
-			case(6):
-				return new Color(0.3f, 0.6f, 0.0f);
-			case(7):
-				return new Color(0.6f, 0.3f, 0.0f);
-			case (8):
-				return new Color(0.3f, 0.0f, 0.6f);
-			case (9):
-				return new Color(0.6f, 0.0f, 0.3f);
-			case (10):
-				return new Color(0.0f, 0.6f, 0.3f);
-			case (11):
-				return new Color(0.0f, 0.3f, 0.6f);
-			case (12):
-				return new Color(0.3f, 0.6f, 0.3f);
-			case (13):
-				return new Color(0.3f, 0.3f, 0.6f);
-			case (14):
-				return new Color(0.6f, 0.3f, 0.3f);
-			default:
-				return Color.black;
-		}
 	}
 }
